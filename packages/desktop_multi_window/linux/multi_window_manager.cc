@@ -52,10 +52,11 @@ std::string MultiWindowManager::Create(FlValue* args) {
   WindowConfiguration config = WindowConfiguration::FromFlValue(args);
   std::string window_id = GenerateWindowId();
 
-  // Create GTK window
-  GtkApplication* app = GTK_APPLICATION(g_application_get_default());
-  GtkWindow* window = GTK_WINDOW(gtk_application_window_new(app));
-  gtk_application_add_window(app, window);
+  // Create a plain GtkWindow (NOT GtkApplicationWindow) for sub-windows.
+  // GtkApplicationWindows are tracked by GtkApplication, and closing one can
+  // trigger the application to quit. Plain GtkWindows are independent.
+  // See: https://github.com/MixinNetwork/flutter-plugins/issues/457
+  GtkWindow* window = GTK_WINDOW(gtk_window_new(GTK_WINDOW_TOPLEVEL));
 
   gboolean use_header_bar = TRUE;
 #ifdef GDK_WINDOWING_X11
@@ -91,6 +92,12 @@ std::string MultiWindowManager::Create(FlValue* args) {
                                            GTK_WIDGET(window));
   windows_[window_id] = std::move(w);
 
+  // Connect our delete-event handler BEFORE creating the FlView.
+  // GLib signal handlers run in connection order, so ours fires first.
+  // For sub-windows, our handler returns TRUE to stop propagation, preventing
+  // the Flutter engine's handler (which may quit the app) from running.
+  ObserveWindowClose(window_id, window, /* is_sub_window= */ true);
+
   // Setup Flutter project
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   const char* entrypoint_args[] = {"multi_window", window_id.c_str(),
@@ -103,23 +110,10 @@ std::string MultiWindowManager::Create(FlValue* args) {
   gtk_widget_show(GTK_WIDGET(fl_view));
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(fl_view));
 
-  // Issues from flutter/engine: https://github.com/flutter/engine/pull/40033
-  // Prevent delete-event from flutter engine shell, which will quit the whole
-  // appplication when the window is closed. this can be done by
-  // [window_manager] plugin, but we need it here if user is not using that
-  // plugin.
-  guint handler_id = g_signal_handler_find(window, G_SIGNAL_MATCH_DATA, 0, 0,
-                                           NULL, NULL, fl_view);
-  if (handler_id > 0) {
-    g_signal_handler_disconnect(window, handler_id);
-  }
-
   // Call window created callback
   if (_g_window_created_callback) {
     _g_window_created_callback(FL_PLUGIN_REGISTRY(fl_view));
   }
-
-  ObserveWindowClose(window_id, window);
   // Register plugin
   g_autoptr(FlPluginRegistrar) desktop_multi_window_registrar =
       fl_plugin_registry_get_registrar_for_plugin(FL_PLUGIN_REGISTRY(fl_view),
@@ -150,7 +144,8 @@ void MultiWindowManager::AttachMainWindow(GtkWidget* window_widget,
       std::make_unique<FlutterWindow>(main_window_id, "", window_widget);
   windows_[main_window_id] = std::move(window);
 
-  ObserveWindowClose(main_window_id, GTK_WINDOW(window_widget));
+  ObserveWindowClose(main_window_id, GTK_WINDOW(window_widget),
+                     /* is_sub_window= */ false);
   desktop_multi_window_plugin_register_with_registrar_internal(
       registrar, windows_[main_window_id].get());
 
@@ -159,21 +154,41 @@ void MultiWindowManager::AttachMainWindow(GtkWidget* window_widget,
 }
 
 void MultiWindowManager::ObserveWindowClose(const std::string& window_id,
-                                            GtkWindow* window) {
-  g_signal_connect(
-      GTK_WIDGET(window), "destroy",
-      G_CALLBACK(+[](GtkWidget* widget, gpointer arg) {
-        auto* window_id_ptr = static_cast<std::string*>(arg);
-
-        GtkWidget* child = gtk_bin_get_child(GTK_BIN(widget));
-        if (child && FL_IS_VIEW(child)) {
-          gtk_container_remove(GTK_CONTAINER(widget), child);
-        }
-
-        MultiWindowManager::Instance()->RemoveWindow(*window_id_ptr);
-        delete window_id_ptr;
-      }),
-      new std::string(window_id));
+                                            GtkWindow* window,
+                                            bool is_sub_window) {
+  if (is_sub_window) {
+    // Sub-window close handler.
+    // Return TRUE to stop signal propagation. This prevents:
+    // 1. The Flutter engine's delete-event handler from calling
+    //    g_application_quit() (if one is registered).
+    // 2. The default handler from destroying the window, which would trigger
+    //    FlView unrealize and cause a GLX BadAccess crash due to GL context
+    //    conflicts with the main window.
+    // Instead, we just hide the window. It will be fully cleaned up when the
+    // application exits.
+    // See: https://github.com/MixinNetwork/flutter-plugins/issues/457
+    g_signal_connect(
+        GTK_WIDGET(window), "delete-event",
+        G_CALLBACK(+[](GtkWidget* widget, GdkEvent* event, gpointer arg) -> gboolean {
+          auto* window_id_ptr = static_cast<std::string*>(arg);
+          MultiWindowManager::Instance()->RemoveWindow(*window_id_ptr);
+          delete window_id_ptr;
+          gtk_widget_hide(widget);
+          return TRUE;
+        }),
+        new std::string(window_id));
+  } else {
+    // Main window: allow normal destruction so the app quits.
+    g_signal_connect(
+        GTK_WIDGET(window), "delete-event",
+        G_CALLBACK(+[](GtkWidget* widget, GdkEvent* event, gpointer arg) -> gboolean {
+          auto* window_id_ptr = static_cast<std::string*>(arg);
+          MultiWindowManager::Instance()->RemoveWindow(*window_id_ptr);
+          delete window_id_ptr;
+          return FALSE;
+        }),
+        new std::string(window_id));
+  }
 }
 
 FlutterWindow* MultiWindowManager::GetWindow(const std::string& window_id) {

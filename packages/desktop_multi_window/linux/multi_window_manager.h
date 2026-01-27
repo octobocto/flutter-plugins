@@ -37,7 +37,8 @@ class MultiWindowManager
  private:
 
   void ObserveWindowClose(const std::string& window_id,
-                            GtkWindow* window);
+                            GtkWindow* window,
+                            bool is_sub_window);
 
   void NotifyWindowsChanged();
 
