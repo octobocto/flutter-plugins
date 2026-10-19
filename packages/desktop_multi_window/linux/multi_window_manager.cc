@@ -100,6 +100,7 @@ std::string MultiWindowManager::Create(FlValue* args) {
 
   // Setup Flutter project
   g_autoptr(FlDartProject) project = fl_dart_project_new();
+  fl_dart_project_set_enable_impeller(project, FALSE);
   const char* entrypoint_args[] = {"multi_window", window_id.c_str(),
                                    config.arguments.c_str(), nullptr};
   fl_dart_project_set_dart_entrypoint_arguments(
