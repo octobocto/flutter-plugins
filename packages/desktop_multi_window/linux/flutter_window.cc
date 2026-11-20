@@ -42,6 +42,30 @@ void FlutterWindow::HandleWindowMethod(const gchar* method,
   } else if (strcmp(method, "window_hide") == 0) {
     Hide();
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+  } else if (strcmp(method, "window_set_frame") == 0) {
+    GtkWindow* window = GTK_WINDOW(window_);
+    gtk_window_move(
+        window,
+        static_cast<gint>(fl_value_get_float(fl_value_lookup_string(arguments, "x"))),
+        static_cast<gint>(fl_value_get_float(fl_value_lookup_string(arguments, "y"))));
+    gtk_window_resize(
+        window,
+        static_cast<gint>(fl_value_get_float(fl_value_lookup_string(arguments, "width"))),
+        static_cast<gint>(fl_value_get_float(fl_value_lookup_string(arguments, "height"))));
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+  } else if (strcmp(method, "window_set_title") == 0) {
+    const gchar* title =
+        fl_value_get_string(fl_value_lookup_string(arguments, "title"));
+    GtkWindow* window = GTK_WINDOW(window_);
+    gtk_window_set_title(window, title);
+    GtkWidget* titlebar = gtk_window_get_titlebar(window);
+    if (titlebar != nullptr && GTK_IS_HEADER_BAR(titlebar)) {
+      gtk_header_bar_set_title(GTK_HEADER_BAR(titlebar), title);
+    }
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+  } else if (strcmp(method, "window_close") == 0) {
+    gtk_window_close(GTK_WINDOW(window_));
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
   } else {
     g_autofree gchar* error_msg = g_strdup_printf("unknown method: %s", method);
     response = FL_METHOD_RESPONSE(

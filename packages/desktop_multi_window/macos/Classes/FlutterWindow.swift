@@ -106,6 +106,25 @@ class FlutterWindow: NSObject {
         case "window_hide":
             window.orderOut(nil)
             result(nil)
+        case "window_set_frame":
+            let args = arguments as! [String: Any?]
+            let x = args["x"] as! Double
+            let y = args["y"] as! Double
+            let width = args["width"] as! Double
+            let height = args["height"] as! Double
+            // Dart gives the top-left corner from the top of the primary screen.
+            let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+            window.setFrame(
+                NSRect(x: x, y: primaryHeight - y - height, width: width, height: height),
+                display: true)
+            result(nil)
+        case "window_set_title":
+            let args = arguments as! [String: Any?]
+            window.title = args["title"] as! String
+            result(nil)
+        case "window_close":
+            window.close()
+            result(nil)
         default:
             result(FlutterError(code: "-1", message: "unknown method \(method)", details: nil))
         }
