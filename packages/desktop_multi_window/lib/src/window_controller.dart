@@ -84,6 +84,21 @@ class WindowController {
 
   Future<void> hide() => _callWindowMethod('window_hide', {});
 
+  /// Moves and resizes the window. [frame] is in logical pixels, from the
+  /// top-left corner of the primary screen.
+  Future<void> setFrame(Rect frame) => _callWindowMethod('window_set_frame', {
+        'x': frame.left,
+        'y': frame.top,
+        'width': frame.width,
+        'height': frame.height,
+      });
+
+  Future<void> setTitle(String title) =>
+      _callWindowMethod('window_set_title', {'title': title});
+
+  /// Closes the window as its close button does.
+  Future<void> close() => _callWindowMethod('window_close', {});
+
   @optionalTypeArgs
   Future<T?> invokeMethod<T>(String method, [dynamic arguments]) =>
       _windowChannel.invokeMethod<T>(method, arguments);

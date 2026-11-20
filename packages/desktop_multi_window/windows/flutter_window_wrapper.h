@@ -7,6 +7,7 @@
 #include <flutter/method_result.h>
 #include <memory>
 #include <string>
+#include <variant>
 
 class FlutterWindowWrapper {
  public:
@@ -51,6 +52,35 @@ class FlutterWindowWrapper {
         ::ShowWindow(hwnd_, SW_HIDE);
       }
       result->Success();
+    } else if (method == "window_set_frame") {
+      if (hwnd_) {
+        // Dart gives logical pixels; Win32 wants physical ones.
+        const double scale = ::GetDpiForWindow(hwnd_) / 96.0;
+        ::SetWindowPos(hwnd_, nullptr,
+                       static_cast<int>(GetDouble(arguments, "x") * scale),
+                       static_cast<int>(GetDouble(arguments, "y") * scale),
+                       static_cast<int>(GetDouble(arguments, "width") * scale),
+                       static_cast<int>(GetDouble(arguments, "height") * scale),
+                       SWP_NOZORDER | SWP_NOACTIVATE);
+      }
+      result->Success();
+    } else if (method == "window_set_title") {
+      if (hwnd_) {
+        const auto& title = std::get<std::string>(
+            arguments->at(flutter::EncodableValue("title")));
+        const int length = ::MultiByteToWideChar(
+            CP_UTF8, 0, title.c_str(), static_cast<int>(title.size()), nullptr, 0);
+        std::wstring wide(length, L'\0');
+        ::MultiByteToWideChar(CP_UTF8, 0, title.c_str(),
+                              static_cast<int>(title.size()), wide.data(), length);
+        ::SetWindowTextW(hwnd_, wide.c_str());
+      }
+      result->Success();
+    } else if (method == "window_close") {
+      if (hwnd_) {
+        ::PostMessage(hwnd_, WM_CLOSE, 0, 0);
+      }
+      result->Success();
     } else {
       result->Error("-1", "unknown method: " + method);
     }
@@ -58,6 +88,12 @@ class FlutterWindowWrapper {
 
  protected:
   void SetWindowHandle(HWND hwnd) { hwnd_ = hwnd; }
+
+ private:
+  static double GetDouble(const flutter::EncodableMap* arguments,
+                          const char* key) {
+    return std::get<double>(arguments->at(flutter::EncodableValue(key)));
+  }
 
  private:
   std::string window_id_;
