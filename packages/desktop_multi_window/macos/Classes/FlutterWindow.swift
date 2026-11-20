@@ -19,6 +19,20 @@ class CustomWindow: NSWindow {
             defer: false)
 
         self.isReleasedWhenClosed = false
+        self.animationBehavior = .none
+    }
+
+    /// When true, close hides the window and keeps its engine.
+    var hidesOnClose = false
+    var onHidden: (() -> Void)?
+
+    override func close() {
+        guard hidesOnClose else {
+            super.close()
+            return
+        }
+        orderOut(nil)
+        onHidden?()
     }
 
     deinit {
@@ -57,6 +71,10 @@ class FlutterWindow: NSObject {
             queue: .main
         ) { [weak self] notification in
             self?.didChangeOcclusionState(notification)
+        }
+
+        (window as? CustomWindow)?.onHidden = { [weak self] in
+            self?.notifyWindowEvent("onWindowHidden", data: [:])
         }
 
         closeObserver = NotificationCenter.default.addObserver(
@@ -121,6 +139,14 @@ class FlutterWindow: NSObject {
         case "window_set_title":
             let args = arguments as! [String: Any?]
             window.title = args["title"] as! String
+            result(nil)
+        case "window_set_hide_on_close":
+            let args = arguments as! [String: Any?]
+            guard let customWindow = window as? CustomWindow else {
+                result(FlutterError(code: "-1", message: "the main window cannot hide on close", details: nil))
+                return
+            }
+            customWindow.hidesOnClose = args["hide"] as! Bool
             result(nil)
         case "window_close":
             window.close()

@@ -17,6 +17,12 @@ Stream<void> get onWindowsChanged => _windowEvent.map((call) {
       return null;
     }).where((event) => event != null);
 
+/// Fires in a sub-window engine when its window hides on close, see
+/// [WindowController.setHideOnClose].
+Stream<void> get onWindowHidden => _windowEvent
+    .where((call) => call.method == 'onWindowHidden')
+    .map((_) {});
+
 /// The [WindowController] instance that is used to control this window.
 class WindowController {
   WindowController._(this.windowId, this.arguments)
@@ -95,6 +101,11 @@ class WindowController {
 
   Future<void> setTitle(String title) =>
       _callWindowMethod('window_set_title', {'title': title});
+
+  /// When [hide] is true, a close hides this sub-window and keeps its engine,
+  /// and [onWindowHidden] fires in its engine. macOS only.
+  Future<void> setHideOnClose(bool hide) =>
+      _callWindowMethod('window_set_hide_on_close', {'hide': hide});
 
   /// Closes the window as its close button does.
   Future<void> close() => _callWindowMethod('window_close', {});
