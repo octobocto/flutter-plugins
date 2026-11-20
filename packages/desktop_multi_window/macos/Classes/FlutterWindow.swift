@@ -37,7 +37,7 @@ class FlutterWindow: NSObject {
     private var didResignActiveObserver: NSObjectProtocol?
     private var closeObserver: NSObjectProtocol?
 
-    init(windowId: WindowId, windowArgument: String, window: NSWindow) {
+    init(windowId: WindowId, windowArgument: String, window: NSWindow, ownsEngine: Bool = false) {
         self.windowId = windowId
         self.windowArgument = windowArgument
         self.window = window
@@ -61,8 +61,16 @@ class FlutterWindow: NSObject {
 
         closeObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: window, queue: .main
-        ) { [windowId] _ in
+        ) { [windowId, window] _ in
             MultiWindowManager.shared.removeWindow(windowId: windowId)
+            guard ownsEngine, let controller = window.contentViewController as? FlutterViewController
+            else { return }
+            // An engine lives on after its window closes. Stop it after the
+            // close returns, as the close can come from a call of this engine.
+            DispatchQueue.main.async {
+                window.contentViewController = nil
+                controller.engine.shutDownEngine()
+            }
         }
     }
 

@@ -118,7 +118,7 @@ class MultiWindowManager: NSObject {
         let registrar = flutterViewController.registrar(forPlugin: "DesktopMultiWindowPlugin")
 
         let flutterWindow = FlutterWindow(
-            windowId: windowId, windowArgument: config.arguments, window: window)
+            windowId: windowId, windowArgument: config.arguments, window: window, ownsEngine: true)
         windows[windowId] = flutterWindow
 
         let channel = registerMultiWindowChannel(window: flutterWindow, with: registrar)
