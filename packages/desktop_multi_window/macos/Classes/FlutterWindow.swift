@@ -132,9 +132,14 @@ class FlutterWindow: NSObject {
             let height = args["height"] as! Double
             // Dart gives the top-left corner from the top of the primary screen.
             let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
-            window.setFrame(
+            // Constrain as a show does, so that a show does not resize again. Each resize
+            // waits for a frame.
+            let frame = window.constrainFrameRect(
                 NSRect(x: x, y: primaryHeight - y - height, width: width, height: height),
-                display: true)
+                to: window.screen ?? NSScreen.screens.first)
+            if frame != window.frame {
+                window.setFrame(frame, display: true)
+            }
             result(nil)
         case "window_set_title":
             let args = arguments as! [String: Any?]
